@@ -2,20 +2,20 @@ import requests
 import bs4
 from selenium import webdriver
 import csv
+import re
 
 def scrape_fragrance_info(csv_writer):
     driver = webdriver.Firefox()
     driver.get('https://www.fragrantica.com/perfume/Valentino/Valentino-Uomo-Born-In-Roma-Coral-Fantasy-71761.html')
 
-    driver.implicitly_wait(0.5)  # Ceka se pola sekunde
+    driver.implicitly_wait(0.5)
 
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.88 Safari/537.36'
     }
 
-    # Kao test cu raditi sa svojim Valentino parfemom
+    # test url
     url = 'https://www.fragrantica.com/perfume/Valentino/Valentino-Uomo-Born-In-Roma-Coral-Fantasy-71761.html'
-    # url = 'https://www.punmiris.com/parfem/Valentino/Valentino-Uomo-Born-In-Roma-Coral-Fantasy-71761.html'
     response = requests.get(url, headers=headers)
 
     response.raise_for_status()
@@ -40,30 +40,28 @@ def scrape_fragrance_info(csv_writer):
     notes_chart = soup.find_all('div', class_='grid-x grid-padding-y')
     cell_div = notes_chart[0].find('div', class_='cell')
 
-    # Ovo cu ovde ostaviti cisto ako se odlucimo da rasporedimo note kao top, middle i base
-    note_headers = cell_div.find_all('h4')
-    #print(note_headers)
-
     div_list = cell_div.find_all('div')
-    notes = set()
-    for div in reversed(div_list):
-        if div.get_text() != '' and div.get_text() != 'Perfume Pyramid':
-            can_add = True
-            for note in notes:
-                if note in div.get_text():
-                    can_add = False
-            if can_add:
-                notes.add(div.get_text())
 
-    print('Notes: ')
-    for note in notes:
-        print(note)
+    # Splitujemo string po 'Top Notes', 'Middle Notes' i 'Base Notes'
+    sections = re.split(r'Top Notes|Middle Notes|Base Notes', div_list[0].get_text())
+
+    # Potom kreiramo kljuceve za mapu/recnik i stripujemo kako bismo izbegli nepotrebne razmake
+    notes = {
+        "Top Notes": sections[1].strip() if len(sections) > 1 else "",
+        "Middle Notes": sections[2].strip() if len(sections) > 2 else "",
+        "Base Notes": sections[3].strip() if len(sections) > 3 else ""
+    }
+
+    # S obrzirom na to kakav string dobijemo, razdvajamo ga ana mestima gde je malo slovo proed velikog, tu bi trebalo da je pocetak naziva nove note
+    for key in notes:
+        notes[key] = re.sub(r'([a-z])([A-Z])', r'\1| \2', notes[key]).split('| ')
+        notes[key] = [note.strip() for note in notes[key] if note.strip()]
+
+    print('Notes: ', notes)
 
     # Skrejpovanje karakteristika poput: LONGEVITY, SILLAGE - ne znam da li mi se skale svidjaju iskreno al videcemo u sustini je prosecna ocena kao
     bottom_voting_charts = soup.find_all('div', class_='cell small-12 medium-6')
     for chart in bottom_voting_charts:
-        #print(chart)
-        #print(chart.get_text())
         if 'longevity' in chart.get_text():
             # longevity scale: eternal: 4.5 - 5.0, long-lasting: 4.0 - 4.49, moderate: 3.5 - 3.9, weak: 3.0 - 3.49, very weak: 0.0 - 2.99
             print(chart.get_text())
@@ -75,13 +73,18 @@ def scrape_fragrance_info(csv_writer):
             sillage_number = chart.get_text().split(":")[1].split()[0]
             print(sillage_number)
 
-    # Dobavljanje rejtinga (za sada je to samo recenica u kojoj su izlistani i glasovi i ocena, mozemo to podeliti pa posle napisati neki algoritam za bolje racunanje)
+    # Dobavljanje rejtinga
     rating = soup.find_all('p', class_='info-note')
     print(rating[0].get_text())
-    rating_number = rating[0].prettify().get_text()
-    #rating_map = {}
-    #rating_map["rating"] = "4"
-    #rating_map["votes"] = "4000"
+    match = re.search(r'rating\s+([\d.]+)\s+out of\s+5 with\s+([\d,]+)\s+votes', rating[0].get_text())
+
+    rating_dict = {}
+    if match:
+        rating_dict['rating'] = float(match.group(1))
+        rating_dict['votes'] = int(match.group(2).replace(',', ''))
+    else:
+        rating_dict['rating'] = 0
+        rating_dict['votes'] = 0
 
     # Dobavljanje opisa
     description = soup.find_all('div', {"itemprop": "description"})
@@ -101,12 +104,9 @@ def scrape_fragrance_info(csv_writer):
     html = driver.page_source
     selenium_soup = bs4.BeautifulSoup(html, 'html.parser')
 
-    parent_div = selenium_soup.find('div', class_='grid-x bg-white grid-padding-x grid-padding-y')  # Ovaj postoji samo jedan na sajtu
-    parent_divs = parent_div.find_all('div', class_='cell small-12')  # Ovih ima 35
-    child_grid_divs = parent_divs[1].find_all('div',
-                                              class_='grid-x grid-margin-x grid-margin-y')  # njih ima 5 i to se poklapa
-    child_cell_divs = child_grid_divs[3].find_all('div', class_='cell small-6')
-
+    parent_div = selenium_soup.find('div', class_='grid-x bg-white grid-padding-x grid-padding-y')
+    parent_divs = parent_div.find_all('div', class_='cell small-12')
+    child_grid_divs = parent_divs[1].find_all('div', class_='grid-x grid-margin-x grid-margin-y')
     seasons_div = child_grid_divs[3].find_all('div', class_='voting-small-chart-size')
 
     season_labels = ['winter', 'spring', 'summer', 'fall', 'day', 'night']
@@ -136,15 +136,16 @@ def scrape_fragrance_info(csv_writer):
     day_ratings = f"Day: {day}, Night: {night}"
 
     # Pisanje u CSV fajl
-    csv_writer.writerow(['BREND PARFEMA', 'IME PARFEMA', accords, notes, longevity_number, sillage_number, rating_number, season_ratings, day_ratings, perfumers, stripped_description, 'IMAGE URL'])
+    # Ovde se moram samo vratiti hardkodovao sam naziv parfema, brend i image url, kada se bude ucitavalo iz glavnog csv fajla bice drukcije
+    csv_writer.writerow(['BREND PARFEMA', 'IME PARFEMA', accords, notes, longevity_number, sillage_number, rating_dict, season_ratings, day_ratings, perfumers, stripped_description, 'IMAGE URL'])
 
 
 if __name__ == "__main__":
     # Verovatno je neka ideja da se cita iz fajla svaki parfem pojedinacno i da na osnovu toga formiramo search (taj search vrlo verovatno mora preko selenijuma da se uradi i da se rucno prati da li nalazi dobar parfem, nekada zeljeni parfem nije prvi na listi)
-    # na fragrantici. E sad nije to bilo bas naivno tako da videcemo koliko ce moci tako da se radi. Mozda bude moralo i rucno ili semi-rucno sve...
-    print('Scraping fragrance info from fragrantica...')
+    # na fragrantici.
+    print('Scraping fragrance information from fragrantica...')
 
-    with open('jPlusMFragranticaProba.csv', 'w', newline='', encoding='utf-8') as csvfile:
+    with open('../datasets/fragranticaProba.csv', 'w', newline='', encoding='utf-8') as csvfile:
         csv_writer = csv.writer(csvfile, delimiter='|')
 
         csv_writer.writerow(['Brand', 'Name', 'Accords', 'Notes', 'Longevity', 'Sillage', 'Rating', 'Season ratings', 'Day ratings', 'Designers', 'Description', 'Image URL'])
