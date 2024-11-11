@@ -3,7 +3,7 @@ import csv
 from selenium import webdriver
 
 driver = webdriver.Firefox()
-driver.get('https://fragrantica.com/search/?dizajner=Perfumer%20H')
+driver.get('https://www.fragrantica.com/search/?dizajner=Carolina%20Herrera')
 
 driver.implicitly_wait(2)
 
