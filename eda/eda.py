@@ -1,7 +1,7 @@
 import pandas as pd
 from ast import literal_eval
 from collections import Counter
-from itertools import combinations
+import itertools
 import re
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -87,42 +87,131 @@ def winter_perfumes_accords_notes(data):
 
 # Pitanje 4: Колики је проценат парфемских кућа које су учествовале у креирању 20 најбоље оцењених парфема са више од 10.000 рецензија?
 def top_perfume_houses(data):
+    # Филтрирање парфема са више од 10.000 рецензија
     filtered = data[data['Rating'].apply(lambda x: x['votes'] > 10000)]
-    # Sortiranje po vrednosti ocene
+
+    # Сортирање по рејтингу и узимање топ 20
     top_20 = filtered.sort_values(by='Rating', key=lambda x: x.apply(lambda y: y['rating']), ascending=False).head(20)
-    
-    houses = set(house for designers in top_20['Designers'] for house in designers)
-    return len(houses) / len(data['Designers'].explode().unique()) * 100
 
-# Pitanje 5: Која сезона се највише препоручује за парфеме са оценом 4,50 више, који такође имају најмање 5000 рецензија?
+    # Узимање имена топ 20 парфема
+     # Uzimanje imena top 20 parfema, vrednosti ocena i broja glasova
+    top_perfumes = [
+        {
+            'name': row['Name'],
+            'rating': row['Rating']['rating'],
+            'votes': row['Rating']['votes']
+        }
+        for _, row in top_20.iterrows()
+    ]
+
+    # Proveravamo i konvertujemo Designers u liste ako su stringovi
+    if isinstance(top_20['Brand'].iloc[0], str):
+        top_20['Brand'] = top_20['Brand'].apply(lambda x: x.split(', '))
+
+    # Brojanje učestvovanja brendova u top 20
+    house_counts = Counter(house for designers in top_20['Brand'] for house in designers)
+
+    # Računanje udeo svakog brenda
+    total_top_20 = len(top_20)
+    house_percentages = {house: (count / total_top_20) * 100 for house, count in house_counts.items()}
+
+
+    return {
+        'house_percentages': house_percentages,  # Проценти по кућама
+        'top_perfumes': top_perfumes  # Имена топ 20 парфема
+    }
+
+# Pitanje 5: Која сезона се највише препоручује за парфеме са оценом 4,30 више, који такође имају најмање 5000 рецензија?
+# (stavila sam da nadje za svaku sezonu broj parfma koji zadovoljavaju upit, najvece je winter, ali vraca vise informacija)
 def most_recommended_season(data):
-    filtered = data[(data['Rating'].apply(lambda x: x['rating'] >= 4.5)) & 
+    filtered = data[(data['Rating'].apply(lambda x: x['rating'] >= 4.3)) & 
                     (data['Rating'].apply(lambda x: x['votes'] >= 5000))]
+    
     season_counter = Counter()
+    season_perfumes = {"Winter": [], "Spring": [], "Summer": [], "Fall": []}
+    
     for _, row in filtered.iterrows():
-        season_counter.update(row['Season ratings'])
-    return season_counter.most_common(1)
-
+        # Pronađi sezonu sa najvećim procentom
+        season_ratings = row['Season ratings']  # Već je parsiran u dict
+        max_season = max(season_ratings, key=season_ratings.get)  # Sezona sa najvećim procentom
+        season_counter[max_season] += 1  # Povećaj brojanje za tu sezonu
+        
+        # Dodaj informacije o parfemu za tu sezonu
+        season_perfumes[max_season].append({
+            'name': row['Name'],
+            'rating': row['Rating']['rating'],
+            'votes': row['Rating']['votes']
+        })
+    
+    return {
+        'season_counts': season_counter.most_common(4),  # Broj parfema po sezoni
+        'season_perfumes': season_perfumes  # Detalji o parfemima po sezoni
+    }
 # Pitanje 6: Ко су 5 најбољих парфимера на основу оцене њихових парфема?
-def top_perfumers(data):
+def top_perfumers(data, min_votes=50000):
     perfumer_scores = Counter()
     perfumer_counts = Counter()
+    perfumer_votes = Counter()
+
+    # Prikupljanje podataka o ocenama i glasovima
     for _, row in data.iterrows():
         for perfumer in row['Designers']:
-            perfumer_scores[perfumer] += row['Rating']['rating']
+            rating = row['Rating']['rating']
+            votes = row['Rating']['votes']  # Pretpostavljamo da postoji broj glasova
+            perfumer_scores[perfumer] += rating * votes
             perfumer_counts[perfumer] += 1
-    avg_scores = {perfumer: perfumer_scores[perfumer] / perfumer_counts[perfumer] for perfumer in perfumer_scores}
-    return sorted(avg_scores.items(), key=lambda x: x[1], reverse=True)[:5]
+            perfumer_votes[perfumer] += votes
+    
+    # Računanje ponderisanih prosek ocena za svakog parfumer
+    avg_scores = {}
+    for perfumer in perfumer_scores:
+        total_votes = perfumer_votes[perfumer]
+        
+        # Samo parfumeri sa dovoljnim brojem glasova
+        if total_votes >= min_votes:
+            avg_scores[perfumer] = perfumer_scores[perfumer] / total_votes
+        else:
+            # Ako parfumer ima manje glasova od min_votes, ne uzimamo ga u obzir
+            continue
+    
+    # Sortiranje po ponderisanoj oceni
+    sorted_perfumers = sorted(avg_scores.items(), key=lambda x: x[1], reverse=True)[:5]
+    
+    # Ispis rezultata
+    print("Top 5 parfumeri po ponderisanoj oceni i broju glasova:")
+    for perfumer, score in sorted_perfumers:
+        total_votes = perfumer_votes[perfumer]
+        print(f"{perfumer}: Ponderisana ocena = {score:.2f}, Ukupno glasova = {total_votes}")
+    
+    return sorted_perfumers, perfumer_votes
 
 # Pitanje 7: Која комбинација од 3 ноте је најчешћа међу парфемима са оценом 4,50 и више, који такође имају најмање 5000 рецензија?
 def most_common_note_combinations(data):
-    filtered = data[(data['Rating'].apply(lambda x: x['rating'] >= 4.5)) & 
-                    (data['Rating'].apply(lambda x: x['votes'] >= 5000))]
-    note_combinations = Counter()
-    for _, row in filtered.iterrows():
-        notes = set(note for note_list in row['Notes'].values() for note in note_list)
-        note_combinations.update(combinations(notes, 3))
-    return note_combinations.most_common(1)
+    filtered = data[(data['Rating'].apply(lambda x: x['rating'] >= 3.5)) & #promenila sam da bude 4, jer ima jako malo parfmeema preko 4.5, svakako se moze podesaavati, 
+                    (data['Rating'].apply(lambda x: x['votes'] >= 5000))] #MOZE SE PODESAVATI SVE OD VREDNOSTI I U DRUGIM UPITIMA
+    """
+    Funkcija koja računa najčešće triplete nota u 'Base Notes'
+    iz kolone 'Notes' u DataFrame-u.
+    """
+    triplets = []  # Lista za triplete
+    print(len(filtered))
+    # Iteracija kroz svaki zapis u koloni 'Notes'
+    for notes in filtered['Notes']:
+        base_notes = notes.get('Base Notes', [])  # Uzmi Base Notes ako postoje
+        if len(base_notes) >= 3:  # Samo ako ima najmanje 3 note u Base Notes
+            sorted_base_notes = sorted(base_notes)  # Sortiranje nota po abecedi
+
+            # Generisanje tripleta kombinacijom 3 note
+            for triplet in itertools.combinations(sorted_base_notes, 3):
+                triplets.append(triplet)
+
+    # Brojanje frekvencije svakog tripleta
+    triplet_counts = Counter(triplets)
+
+    # Vraćanje top 1 tripleta (najčešći)
+    top_triplet = triplet_counts.most_common(5)
+
+    return top_triplet
 
 def visualize_top_notes_and_perfumes(most_common_notes, perfumes_info):
     # Vizualizacija najzastupljenijih nota (bar chart)
@@ -208,7 +297,81 @@ def visualize_winter_perfumes_accords_notes(data):
     # Prikazivanje grafikona
     plt.show()
 # Pozivanje funkcije
+def plot_pie_chart(house_percentages):
+    # Podaci za pie chart
+    labels = list(house_percentages.keys())
+    sizes = list(house_percentages.values())
 
+    # Pie chart
+    plt.figure(figsize=(8, 8))
+    plt.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=140, colors=plt.cm.tab20.colors)
+    plt.title('Procenat učešća parfemskih kuća u top 20 parfema')
+    plt.axis('equal')  # Osigurava da je pie chart kružni
+    plt.show()
+import matplotlib.pyplot as plt
+
+def plot_season_pie_chart(season_counts):
+    # Ekstrakcija sezona i njihovih brojeva
+    labels = [item[0] for item in season_counts]
+    sizes = [item[1] for item in season_counts]
+
+    # Pie chart
+    plt.figure(figsize=(8, 8))
+    plt.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=140, colors=plt.cm.Paired.colors)
+    plt.title('Učešće sezona u top parfemima')
+    plt.axis('equal')  # Osigurava kružni oblik pie chart-a
+    plt.show()
+def visualize_top_perfumers(top_perfumers_data, perfumer_votes):
+    # Prikupljanje imena, ponderisanih ocena i broja glasova
+    perfumers = [perfumer for perfumer, _ in top_perfumers_data]
+    scores = [score for _, score in top_perfumers_data]
+    votes = [perfumer_votes[perfumer] for perfumer in perfumers]
+
+    # Kreiranje figure
+    fig, ax = plt.subplots(figsize=(10, 6))
+
+    # Horizontalni bar chart
+    ax.barh(perfumers, scores, color='skyblue')
+
+    # Dodavanje broja glasova kao oznaku
+    for i, (vote, score) in enumerate(zip(votes, scores)):
+        ax.text(score + 0.01, i, f'{vote:,}', va='center', ha='left', color='black', fontsize=10)
+
+    # Dodavanje naslova i etiketa
+    ax.set_xlabel('Ponderisana Ocena')
+    ax.set_title('Top 5 Parfumeri sa Ponderisanim Ocenama i Brojem Glasova')
+    ax.set_xlim(0, max(scores) + 0.5)  # Povećavamo opseg kako bi broj glasova stao sa strane
+
+    plt.tight_layout()
+    plt.show()
+def plot_most_common_triplets(top_triplet):
+    # Preuzimanje tripleta i njihovih frekvencija
+    triplets, counts = zip(*top_triplet)
+
+    # Pretvaranje tripleta u string za bolji prikaz
+    triplets_str = [' & '.join(triplet) for triplet in triplets]
+
+    # Kreiranje bar grafikona sa vertikalnim stubovima
+    plt.figure(figsize=(12, 8))  # Povecavamo dimenzije grafikona za bolji pregled
+    sns.barplot(x=triplets_str, y=counts, palette='viridis', width=0.5)  # Smanjujemo širinu stubova
+
+    plt.xlabel('Tripleti', fontsize=14)
+    plt.ylabel('Frekvencija', fontsize=14)
+    plt.title('Top 5 Najčešće Kombinacije Base Notes', fontsize=16)
+
+    # Rotiramo oznake na x-osi za 45 stepeni i povećavamo razmak između oznaka
+    plt.xticks(rotation=45, ha='right', fontsize=12)
+
+    # Povećavamo razmak između stubova i automatski prilagođavamo raspored
+    plt.tight_layout()
+
+    plt.show()
+
+
+
+# Primer poziva:
+# results = most_recommended_season(data)
+# plot_season_pie_chart(results['season_counts'])
 
 
 # Rezultati
@@ -233,16 +396,27 @@ visualize_summer_perfumes_below_rating(data)
 #print("")
 #print("Najčešći akordi i note za zimu:", winter_perfumes_accords_notes(data))
 #visualize_winter_perfumes_accords_notes(data)
-'''
-print("UPIT 4")
-print("")
-print("Procenat parfemskih kuća za top 20 parfema:", top_perfume_houses(data))
-print("UPIT 5")
-print("")
-print("Najčešće preporučena sezona za parfeme 4.5+:", most_recommended_season(data))
-print("UPIT 6")
-print("")
-print("Top 5 parfemera:", top_perfumers(data))
+
+#print("UPIT 4")
+#print("")
+#results = top_perfume_houses(data)
+#print("Procenat parfemskih kuća za top 20 parfema:", results)
+#plot_pie_chart(results['house_percentages'])
+
+#print("UPIT 5")
+#print("")
+#results = most_recommended_season(data)
+#print("Najčešće preporučena sezona za parfeme 4.5+:", results)
+#plot_season_pie_chart(results['season_counts'])
+
+#print("UPIT 6")
+#print("")
+#top_perfumers_data, perfumer_votes = top_perfumers(data, min_votes=90000)  # Dobijamo top 5 parfumeri i perfumer_votes, PAZNJA MOZE SE MENJATI MIN VOTES
+# Primer poziva funkcije
+#visualize_top_perfumers(top_perfumers_data, perfumer_votes)
+
 print("UPIT 7")
 print("")
-print("Najčešća kombinacija 3 note za parfeme 4.5+:", most_common_note_combinations(data))'''
+top_triplet = most_common_note_combinations(data)
+print("Najčešća kombinacija 3 note za parfeme 3.5+ i 5000 recenzija:", top_triplet)
+plot_most_common_triplets(top_triplet)
