@@ -19,7 +19,7 @@ def parse_season_ratings(rating_str):
 
 # Učitavanje podataka
 # Pretpostavljamo da je dataset sačuvan u CSV formatu
-file_path = "../datasets/mainDataset.csv"
+file_path = "datasets/mainDataset.csv"
 data = pd.read_csv(file_path, delimiter='|')
 
 # Pretvaranje stringova u liste i rečnike gde je potrebno
@@ -32,7 +32,7 @@ data['Designers'] = data['Designers'].apply(literal_eval)
 
 # Pitanje 1: Које су најзаступљеније ноте у 5 најбоље оцењених парфема, препоручених за ноћ, са најмање 5000 рецензија?
 def top_notes_night_perfumes(data):
-    # Filtriranje podataka: parfemi sa najmanje 5000 glasova i noćnim ocenama iznad 95%
+    # Filtriranje podataka: parfemi sa najmanje 5000 glasova i noćnim ocenama iznad 95% FIXME: promeniti noc
     filtered = data[(data['Day ratings'].apply(lambda x: x['Night'] >= 80 and x['Day'] <= 50)) & 
                     (data['Rating'].apply(lambda x: x['votes'] >= 5000))]
     
@@ -65,7 +65,7 @@ def top_notes_night_perfumes(data):
 # Pitanje 2: Који проценат парфема препоручених за летњу сезону је оцењен испод оцене 3.00?
 def summer_perfumes_below_rating(data):
     summer_perfumes = data[data['Season ratings'].apply(lambda x: x['Summer'] > 80 and  x['Winter'] <= 50)]
-    below_rating = summer_perfumes[summer_perfumes['Rating'].apply(lambda x: x['rating'] < 4.0)]
+    below_rating = summer_perfumes[summer_perfumes['Rating'].apply(lambda x: x['rating'] < 4.0)] # Promenjeno sa 4.0 na 3.0
     return len(below_rating) / len(summer_perfumes) * 100
 
 # Pitanje 3: Који су најчешћи акорди и ноте у парфемима који се препоручују за зимску сезону?
@@ -86,6 +86,7 @@ def winter_perfumes_accords_notes(data):
     return accords.most_common(10), Counter(notes).most_common(10)
 
 # Pitanje 4: Колики је проценат парфемских кућа које су учествовале у креирању 20 најбоље оцењених парфема са више од 10.000 рецензија?
+# FIXME: tom ford i TOM FORD i ysl i yves saint laurent
 def top_perfume_houses(data):
     # Филтрирање парфема са више од 10.000 рецензија
     filtered = data[data['Rating'].apply(lambda x: x['votes'] > 10000)]
@@ -122,7 +123,7 @@ def top_perfume_houses(data):
     }
 
 # Pitanje 5: Која сезона се највише препоручује за парфеме са оценом 4,30 више, који такође имају најмање 5000 рецензија?
-# (stavila sam da nadje za svaku sezonu broj parfma koji zadovoljavaju upit, najvece je winter, ali vraca vise informacija)
+# (stavila sam da nadje za svaku sezonu broj parfma koji zadovoljavaju upit, najvece je winter, ali vraca vise informacija) (u radu pise 4,5 mi imammo 4.3)
 def most_recommended_season(data):
     filtered = data[(data['Rating'].apply(lambda x: x['rating'] >= 4.3)) & 
                     (data['Rating'].apply(lambda x: x['votes'] >= 5000))]
@@ -147,6 +148,7 @@ def most_recommended_season(data):
         'season_counts': season_counter.most_common(4),  # Broj parfema po sezoni
         'season_perfumes': season_perfumes  # Detalji o parfemima po sezoni
     }
+
 # Pitanje 6: Ко су 5 најбољих парфимера на основу оцене њихових парфема?
 def top_perfumers(data, min_votes=50000):
     perfumer_scores = Counter()
@@ -187,7 +189,7 @@ def top_perfumers(data, min_votes=50000):
 
 # Pitanje 7: Која комбинација од 3 ноте је најчешћа међу парфемима са оценом 4,50 и више, који такође имају најмање 5000 рецензија?
 def most_common_note_combinations(data):
-    filtered = data[(data['Rating'].apply(lambda x: x['rating'] >= 3.5)) & #promenila sam da bude 4, jer ima jako malo parfmeema preko 4.5, svakako se moze podesaavati, 
+    filtered = data[(data['Rating'].apply(lambda x: x['rating'] >= 3.5)) & #promenila sam da bude 4 (zapravo 3,5), jer ima jako malo parfmeema preko 4.5, svakako se moze podesaavati, 
                     (data['Rating'].apply(lambda x: x['votes'] >= 5000))] #MOZE SE PODESAVATI SVE OD VREDNOSTI I U DRUGIM UPITIMA
     """
     Funkcija koja računa najčešće triplete nota u 'Base Notes'
@@ -296,6 +298,7 @@ def visualize_winter_perfumes_accords_notes(data):
     
     # Prikazivanje grafikona
     plt.show()
+    
 # Pozivanje funkcije
 def plot_pie_chart(house_percentages):
     # Podaci za pie chart
@@ -308,6 +311,7 @@ def plot_pie_chart(house_percentages):
     plt.title('Procenat učešća parfemskih kuća u top 20 parfema')
     plt.axis('equal')  # Osigurava da je pie chart kružni
     plt.show()
+
 import matplotlib.pyplot as plt
 
 def plot_season_pie_chart(season_counts):
@@ -321,6 +325,7 @@ def plot_season_pie_chart(season_counts):
     plt.title('Učešće sezona u top parfemima')
     plt.axis('equal')  # Osigurava kružni oblik pie chart-a
     plt.show()
+
 def visualize_top_perfumers(top_perfumers_data, perfumer_votes):
     # Prikupljanje imena, ponderisanih ocena i broja glasova
     perfumers = [perfumer for perfumer, _ in top_perfumers_data]
@@ -344,6 +349,7 @@ def visualize_top_perfumers(top_perfumers_data, perfumer_votes):
 
     plt.tight_layout()
     plt.show()
+    
 def plot_most_common_triplets(top_triplet):
     # Preuzimanje tripleta i njihovih frekvencija
     triplets, counts = zip(*top_triplet)
@@ -367,56 +373,52 @@ def plot_most_common_triplets(top_triplet):
 
     plt.show()
 
-
-
 # Primer poziva:
 # results = most_recommended_season(data)
 # plot_season_pie_chart(results['season_counts'])
 
-
 # Rezultati
 
-#print("UPIT 1")
-#print("")
-#most_common_notes, perfumes_info = top_notes_night_perfumes(data)
-#print("Najzastupljenije note u top 5 parfema za noć:", most_common_notes)
-'''
-print("\nTop 5 parfema sa brendovima i nazivima:")
-for perfume, brand, rating, votes in perfumes_info:
-    print(f"Brend: {brand}, Naziv: {perfume}, Rejting: {rating}, Broj ocena: {votes}")
-visualize_top_notes_and_perfumes(most_common_notes, perfumes_info)
+# print("UPIT 1")
+# print("")
+# most_common_notes, perfumes_info = top_notes_night_perfumes(data)
+# print("Najzastupljenije note u top 5 parfema za noć:", most_common_notes)
+# FIXME: Dodati mozda samo precizniju vizualizaciju za parfeme i njihove ocene
+# print("\nTop 5 parfema sa brendovima i nazivima:")
+# for perfume, brand, rating, votes in perfumes_info:
+#     print(f"Brend: {brand}, Naziv: {perfume}, Rejting: {rating}, Broj ocena: {votes}")
+# visualize_top_notes_and_perfumes(most_common_notes, perfumes_info)
 
-print("UPIT 2")
+# print("UPIT 2")
+# print("")
+# print("Procenat parfema za leto ispod ocene 4.0:", summer_perfumes_below_rating(data))
+# visualize_summer_perfumes_below_rating(data)
+
+# print("UPIT 3")
+# print("")
+# print("Najčešći akordi i note za zimu:", winter_perfumes_accords_notes(data))
+# visualize_winter_perfumes_accords_notes(data)
+
+# print("UPIT 4")
+# print("")
+# results = top_perfume_houses(data)
+# print("Procenat parfemskih kuća za top 20 parfema:", results)
+# plot_pie_chart(results['house_percentages'])
+
+# print("UPIT 5")
+# print("")
+# results = most_recommended_season(data)
+# print("Najčešće preporučena sezona za parfeme 4.5+:", results)
+# plot_season_pie_chart(results['season_counts'])
+
+print("UPIT 6")
 print("")
-print("Procenat parfema za leto ispod ocene 4.0:", summer_perfumes_below_rating(data))
-visualize_summer_perfumes_below_rating(data)
-'''
-
-#print("UPIT 3")
-#print("")
-#print("Najčešći akordi i note za zimu:", winter_perfumes_accords_notes(data))
-#visualize_winter_perfumes_accords_notes(data)
-
-#print("UPIT 4")
-#print("")
-#results = top_perfume_houses(data)
-#print("Procenat parfemskih kuća za top 20 parfema:", results)
-#plot_pie_chart(results['house_percentages'])
-
-#print("UPIT 5")
-#print("")
-#results = most_recommended_season(data)
-#print("Najčešće preporučena sezona za parfeme 4.5+:", results)
-#plot_season_pie_chart(results['season_counts'])
-
-#print("UPIT 6")
-#print("")
-#top_perfumers_data, perfumer_votes = top_perfumers(data, min_votes=90000)  # Dobijamo top 5 parfumeri i perfumer_votes, PAZNJA MOZE SE MENJATI MIN VOTES
+top_perfumers_data, perfumer_votes = top_perfumers(data, min_votes=90000)  # Dobijamo top 5 parfumeri i perfumer_votes, PAZNJA MOZE SE MENJATI MIN VOTES
 # Primer poziva funkcije
-#visualize_top_perfumers(top_perfumers_data, perfumer_votes)
+visualize_top_perfumers(top_perfumers_data, perfumer_votes)
 
-print("UPIT 7")
-print("")
-top_triplet = most_common_note_combinations(data)
-print("Najčešća kombinacija 3 note za parfeme 3.5+ i 5000 recenzija:", top_triplet)
-plot_most_common_triplets(top_triplet)
+# print("UPIT 7")
+# print("")
+# top_triplet = most_common_note_combinations(data)
+# print("Najčešća kombinacija 3 note za parfeme 3.5+ i 5000 recenzija:", top_triplet)
+# plot_most_common_triplets(top_triplet)
